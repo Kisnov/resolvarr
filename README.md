@@ -190,6 +190,16 @@ To update the template later (when we ship a new version with new env vars or pa
 
 Listing in Community Apps will follow once `:latest` is published and a soak period has confirmed stability.
 
+### qBittorrent behind a VPN
+
+If qBittorrent runs through a VPN container, its "run on add" notification often can't reach resolvarr at the usual address (the plain container name and your LAN IP typically don't work from inside the VPN). Give resolvarr a name qBittorrent can reach on your Docker network:
+
+1. Add `--network-alias resolvarr.internal` to resolvarr's **Extra Parameters** and restart it.
+2. Set the qBittorrent webhook address to `http://resolvarr.internal:6075` (or resolvarr's Docker IP).
+3. Use the **Test** button on the qBit webhook page to confirm it works.
+
+Everything stays on your Docker network, so no extra ports need to be opened. See [`docs/how-to.md`](docs/how-to.md) for more.
+
 ## Coexistence with tagarr scripts
 
 Resolvarr does what `tagarr.sh`, `tagarr_recover.sh`, and the discovery flag together do — plus features the scripts don't have (web UI, multi-agent notifications, scheduling, scan history, drill-down inventory, audio/video/DV auto-tags, multi-instance sync UI, Dolby Vision detail).

@@ -29,7 +29,10 @@
 .settings-nav-active { color: var(--text-body); border-left-color: var(--accent-green); background: var(--alpha-active); }
 .settings-nav:visited { color: var(--text-secondary); }
 .settings-nav-active:visited { color: var(--text-body); }
-.settings-content { flex: 1; padding: 16px 24px; }
+/* min-width:0 lets this flex item shrink below its content's intrinsic
+   width, so long unbreakable strings (e.g. TBA rename filenames) truncate
+   inside their own cells instead of widening the whole page. */
+.settings-content { flex: 1; min-width: 0; padding: 16px 24px; }
 .settings-section-title { font-size: 16px; font-weight: 600; color: var(--text-body); margin-bottom: 4px; }
 .settings-section-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
 

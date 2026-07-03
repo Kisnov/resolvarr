@@ -3353,12 +3353,13 @@
                       <strong style="font-size:13px">Season <span x-text="grp.season"></span></strong>
                       <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
                         <template x-for="f in grp.files" :key="f.episodeFileId">
-                          <label style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--bg-card);border-radius:4px;cursor:pointer;font-size:12px">
-                            <input type="checkbox" :checked="tbaRefreshSelected[f.episodeFileId] || false" @change="tbaRefreshSelected[f.episodeFileId] = $event.target.checked">
+                          <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:var(--bg-card);border-radius:4px;cursor:pointer;font-size:12px">
+                            <input type="checkbox" style="margin-top:2px;flex-shrink:0" :checked="tbaRefreshSelected[f.episodeFileId] || false" @change="tbaRefreshSelected[f.episodeFileId] = $event.target.checked">
                             <span style="font-family:ui-monospace,monospace;color:var(--accent-sky);flex-shrink:0" x-text="tbaEpLabel(f)"></span>
-                            <span style="color:var(--text-muted-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1" :title="f.existingName" x-text="f.existingName"></span>
-                            <span style="color:var(--text-muted-secondary);flex-shrink:0">→</span>
-                            <span style="color:var(--text-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1" :title="f.newName" x-text="f.newName"></span>
+                            <div style="flex:1;min-width:0;font-family:ui-monospace,monospace;line-height:1.5">
+                              <div style="color:var(--text-muted-secondary);word-break:break-all"><span style="color:var(--text-muted-secondary);opacity:0.7">from&nbsp;</span><span x-text="f.existingName"></span></div>
+                              <div style="color:var(--text-body);word-break:break-all"><span style="color:var(--accent-green);opacity:0.85">to&nbsp;&nbsp;&nbsp;</span><span x-text="f.newName"></span></div>
+                            </div>
                           </label>
                         </template>
                       </div>
@@ -6885,6 +6886,7 @@
                        style="font-family:'SF Mono','Cascadia Mono',Consolas,monospace;font-size:11px;width:100%">
                 <div style="font-size:11px;color:var(--text-muted-secondary);margin-top:4px;line-height:1.5">
                   Common values: <code>http://resolvarr:6075</code> (container name on the same Docker network), or your LAN IP. Leave blank to use the browser URL (<code x-text="qbitWebhookData.defaultWebhookUrl ? qbitWebhookData.defaultWebhookUrl.replace(/\/api\/qbit\/.*$/, '') : ''"></code>).
+                  <br><strong>qBittorrent running through a VPN?</strong> The plain container name and your LAN IP usually can't reach resolvarr. Add <code>--network-alias resolvarr.internal</code> to resolvarr's Extra Parameters, restart it, then put <code>http://resolvarr.internal:6075</code> here (or resolvarr's Docker IP). Press <strong>Test</strong> to confirm.
                   <template x-if="qbitWebhookOverrideInvalid()">
                     <span style="color:var(--accent-red)"><br>⚠ Must be <code>http://</code> or <code>https://</code> with a host, no path or query.</span>
                   </template>
