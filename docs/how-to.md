@@ -159,6 +159,16 @@ Every movie or series that had the old tag keeps the tag — just with the new n
 
 **Where it runs:** a one-off or scheduled Library scan, the Sonarr grab, and qBittorrent's own "run on add" hook (which also covers cross-seed and manual downloads). The backlog scan's preview shows the video-file count, total size, and a short reason for each decision.
 
+### If qBittorrent runs through a VPN
+
+When qBittorrent runs behind a VPN container, it often can't reach resolvarr at resolvarr's usual address, so qBittorrent's "run on add" notification never arrives. Give qBittorrent an address it can reach on your Docker network:
+
+1. Add `--network-alias resolvarr.internal` to resolvarr's **Extra Parameters** (in your container settings), then restart resolvarr.
+2. In resolvarr, set the qBittorrent webhook address to `http://resolvarr.internal:6075`.
+3. Press **Test**. A green result means it works. If it stays red, use resolvarr's Docker IP instead (for example `http://172.19.0.35:6075`) and Test again.
+
+Everything stays on your Docker network, so nothing extra needs to be opened up.
+
 ---
 
 ## Webhooks (Sonarr/Radarr Connect)

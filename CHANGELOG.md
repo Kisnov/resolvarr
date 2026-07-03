@@ -2,6 +2,16 @@
 
 > ⚠️ **`:dev` is a moving target.** Between dev builds, some changes are not always backwards-compatible with previous versions — your existing rules get auto-converted on first start, but the shape and the controls in the wizard can change. If you're running `:dev`, plan for the occasional adjustment. The first stable `:latest` will be locked down with normal upgrade discipline.
 
+## v0.6.73-dev — Readable TBA rename preview + VPN webhook guidance (2026-07-03)
+
+### Fixed
+
+- **The TBA refresh preview no longer stretches the page sideways.** Long filenames used to widen the whole page (pushing the description off the card). Each file now shows the full old name and new name stacked, wrapping inside its own row, so you can actually read what the rename will do. This also fixes the same sideways-stretch on the other Library scan pages.
+
+### Changed
+
+- **Clearer help for running qBittorrent through a VPN.** When qBittorrent is behind a VPN it often can't reach resolvarr by container name or LAN IP, so its "run on add" webhook never arrives. The qBit webhook page and the how-to now explain the fix: add a `resolvarr.internal` network alias to resolvarr and use `http://resolvarr.internal:6075` as the address.
+
 ## v0.6.72-dev — Quieter qBit notifications + a real webhook test (2026-06-28)
 
 ### Fixed
