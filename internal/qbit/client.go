@@ -230,6 +230,17 @@ func (c *Client) loginLocked(ctx context.Context) error {
 		c.cookieReady = false
 		return errors.New("qbit login forbidden — auth might be temporarily banned (qBit's 'too many failed attempts' lockout)")
 	}
+	if resp.StatusCode == 204 {
+		// Auth is bypassed for this client: qBit's "bypass authentication
+		// for clients in whitelisted IP subnets" (or the localhost bypass)
+		// short-circuits login with 204 No Content. No session cookie is
+		// issued, but subsequent API calls succeed because the IP is
+		// whitelisted. Common when resolvarr shares a Docker network with a
+		// qBit that whitelists local addresses (e.g. a gluetun-routed qBit).
+		// Sonarr/Radarr and the qui proxy accept this too. Treat as logged in.
+		c.cookieReady = true
+		return nil
+	}
 	if resp.StatusCode != 200 {
 		c.cookieReady = false
 		return fmt.Errorf("qbit login HTTP %d: %s", resp.StatusCode, bodyStr)

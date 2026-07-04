@@ -775,9 +775,11 @@ func (r *schedulerRunner) runTbaRefreshSchedule(ctx context.Context, inst *core.
 	if apiErr != nil {
 		return core.RunSummary{Status: "error"}, apiErr
 	}
+	result := tbaRefreshScheduleResult{Found: preview.TotalFiles, Series: preview.SeriesWithTba}
 	parts := []string{fmt.Sprintf("%d TBA files across %d series", preview.TotalFiles, preview.SeriesWithTba)}
 	chainMode := defaultMode(job.Options.RunMode, "apply")
 	if chainMode == "apply" && preview.TotalFiles > 0 {
+		result.Applied = true
 		groups := make([]tbaRefreshApplyGroup, 0, len(preview.Series))
 		for _, ser := range preview.Series {
 			ids := make([]int, 0, len(ser.Files))
@@ -788,8 +790,11 @@ func (r *schedulerRunner) runTbaRefreshSchedule(ctx context.Context, inst *core.
 		}
 		applyResp, applyErr := r.server.runTbaRefreshApply(ctx, inst, groups)
 		if applyErr != nil {
+			result.RenameError = applyErr.Message
 			parts = append(parts, "rename failed: "+applyErr.Message)
 		} else {
+			result.Queued = applyResp.Queued
+			result.Failed = len(applyResp.Errors)
 			parts = append(parts, fmt.Sprintf("queued %d renames", applyResp.Queued))
 			if len(applyResp.Errors) > 0 {
 				parts = append(parts, fmt.Sprintf("%d series failed", len(applyResp.Errors)))
@@ -799,8 +804,21 @@ func (r *schedulerRunner) runTbaRefreshSchedule(ctx context.Context, inst *core.
 	return core.RunSummary{
 		Status:  "ok",
 		Summary: strings.Join(parts, ", "),
-		Result:  preview,
+		Result:  result,
 	}, nil
+}
+
+// tbaRefreshScheduleResult is the structured outcome of a scheduled TBA
+// refresh. It drives the notification field (house-style "Label: N" lines)
+// and the "did anything happen" gate: Found==0 means nothing to report, so
+// the success notification is suppressed (notify only on real change).
+type tbaRefreshScheduleResult struct {
+	Found       int    `json:"found"`
+	Series      int    `json:"series"`
+	Applied     bool   `json:"applied"`
+	Queued      int    `json:"queued"`
+	Failed      int    `json:"failed"`
+	RenameError string `json:"renameError,omitempty"`
 }
 
 // runCombinedSchedule chains discover → recover → tag → cleanup →
