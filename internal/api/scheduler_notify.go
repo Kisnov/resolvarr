@@ -49,6 +49,13 @@ func (r *schedulerRunner) notifyScheduleResult(inst *core.Instance, job core.Sch
 		severity = core.NotificationSeverityWarning
 	}
 
+	// Notify only when something actually happened: a successful TBA-refresh
+	// run that found nothing is pure noise, so suppress it. Errors always
+	// notify. (Other modes keep their existing always-on-success behaviour.)
+	if runErr == nil && scheduleRunFoundNothing(job.Mode, summary) {
+		return
+	}
+
 	title := fmt.Sprintf("Resolvarr: %s", job.Name)
 	fields := buildScheduleFields(inst, job, summary, runErr, duration)
 	plainMessage := buildPlainScheduleMessage(fields)
@@ -73,6 +80,18 @@ func (r *schedulerRunner) notifyScheduleResult(inst *core.Instance, job core.Sch
 		}
 		r.server.App.DispatchNotificationAgent(agent, payload)
 	}
+}
+
+// scheduleRunFoundNothing reports whether a successful run made no change
+// and should therefore not notify. Scoped to TBA refresh today (Found==0 =
+// nothing to rename or report); other modes return false so their existing
+// notify-on-success behaviour is unchanged.
+func scheduleRunFoundNothing(mode core.JobMode, summary core.RunSummary) bool {
+	if mode != core.JobModeTbaRefresh {
+		return false
+	}
+	res, ok := summary.Result.(tbaRefreshScheduleResult)
+	return ok && res.Found == 0
 }
 
 // scheduleEventMatches returns true when the agent has opted into the
@@ -135,6 +154,8 @@ func buildScheduleFields(inst *core.Instance, job core.ScheduledJob, summary cor
 		fields = append(fields, dvDetailModeFields(inst, summary)...)
 	case core.JobModePlexSync:
 		fields = append(fields, plexSyncModeField(summary)...)
+	case core.JobModeTbaRefresh:
+		fields = append(fields, tbaRefreshModeField(summary))
 	case core.JobModeCombined:
 		// Combined schedules can include any phase. Surface a field
 		// block per phase that produced a response. Order matches the
@@ -300,6 +321,37 @@ func recoverModeField(summary core.RunSummary) agents.PayloadField {
 	return agents.PayloadField{
 		Name:   "Recover",
 		Value:  fmt.Sprintf("Would-fix: %d\nFixed: %d\nFailed: %d", t.RecoverWouldFix, t.RecoverFixed, t.RecoverFixFailed),
+		Inline: false,
+	}
+}
+
+// tbaRefreshModeField builds the field for a TBA-refresh schedule in the
+// same "Label: N" multi-line shape the other mode fields use. Without this,
+// a scheduled TBA run notified with no useful body.
+func tbaRefreshModeField(summary core.RunSummary) agents.PayloadField {
+	res, ok := summary.Result.(tbaRefreshScheduleResult)
+	if !ok {
+		val := truncateField(strings.TrimSpace(summary.Summary))
+		if val == "" {
+			val = "No TBA files found"
+		}
+		return agents.PayloadField{Name: "TBA refresh", Value: val, Inline: false}
+	}
+	lines := []string{fmt.Sprintf("Found: %d across %d series", res.Found, res.Series)}
+	switch {
+	case res.RenameError != "":
+		lines = append(lines, "Rename failed: "+res.RenameError)
+	case res.Applied:
+		lines = append(lines, fmt.Sprintf("Renamed: %d", res.Queued))
+		if res.Failed > 0 {
+			lines = append(lines, fmt.Sprintf("Series failed: %d", res.Failed))
+		}
+	default:
+		lines = append(lines, "Preview only (no rename)")
+	}
+	return agents.PayloadField{
+		Name:   "TBA refresh",
+		Value:  strings.Join(lines, "\n"),
 		Inline: false,
 	}
 }

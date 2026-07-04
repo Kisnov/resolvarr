@@ -2,6 +2,17 @@
 
 > ⚠️ **`:dev` is a moving target.** Between dev builds, some changes are not always backwards-compatible with previous versions — your existing rules get auto-converted on first start, but the shape and the controls in the wizard can change. If you're running `:dev`, plan for the occasional adjustment. The first stable `:latest` will be locked down with normal upgrade discipline.
 
+## v0.6.74-dev — qBittorrent-behind-VPN fix + TBA refresh notifications (2026-07-04)
+
+### Fixed
+
+- **qBittorrent running behind a VPN (for example gluetun) now connects even when it bypasses authentication for local addresses.** Resolvarr was treating qBittorrent's "no login needed" reply (HTTP 204) as an error and refusing the connection. The same credentials that already worked in Sonarr and Radarr now work here too.
+
+### Changed
+
+- **Scheduled TBA refresh now sends a notification telling you how many files it renamed, and only when it actually renamed something.** Runs that found nothing stay quiet.
+- **Clearer wording for the "Bad naming" grab-rename option:** it cleans up any non-English bracket at the start of a release name (not only Chinese or Cyrillic titles), plus a year written twice in a row.
+
 ## v0.6.73-dev — Readable TBA rename preview + VPN webhook guidance (2026-07-03)
 
 ### Fixed
