@@ -107,6 +107,19 @@ function appAudioVideoTags() {
     anyAudioTagsBucketEnabled() {
       return !!(this.audioTags && this.audioTags.audio && this.audioTags.audio.enabled);
     },
+    // audioApplyBucketEnabled checks the Audio bucket against the config THIS
+    // run will actually use: the snapshot overlay (QFA / scheduled-rule
+    // apply-from-result) when present, else the global page config. The
+    // request in runAudioTagsScan sends buildSnapshotOverlay(qfaDetailAudio),
+    // so the guard must validate the same source. Otherwise applying a
+    // QFA/rule result whose bucket lives in the wizard config (not the global
+    // Audio-tags page) was wrongly blocked with "Enable Audio bucket first"
+    // even though preview ran fine with that overlay.
+    audioApplyBucketEnabled(result) {
+      const ov = this.buildSnapshotOverlay(result).overlayAudioTags;
+      if (ov) return !!(ov.audio && ov.audio.enabled);
+      return this.anyAudioTagsBucketEnabled();
+    },
     audioTagPrefixInvalid() {
       const p = (this.audioTags.audio && this.audioTags.audio.prefix) || '';
       return !this.autoTagPrefixRule.test(p);
@@ -227,7 +240,7 @@ function appAudioVideoTags() {
       // legacy single-instance flows.
       const targetInstanceId = instanceIdOverride || this.scanInstanceId;
       if (!targetInstanceId) { this.showToast('Pick an instance first', 'error'); return; }
-      if (!this.anyAudioTagsBucketEnabled()) { this.showToast('Enable Audio bucket first', 'error'); return; }
+      if (!this.audioApplyBucketEnabled(this.qfaDetailAudio)) { this.showToast('Enable Audio bucket first', 'error'); return; }
       // Modal-close + state-reset only on the first pass when the
       // caller didn't pass an override. Apply-now-against-variants
       // does multiple successive runs and must NOT close the modal
@@ -373,6 +386,16 @@ function appAudioVideoTags() {
       const v = this.videoTags;
       return !!(v.resolution.enabled || v.codec.enabled || v.hdr.enabled);
     },
+    // videoApplyBucketEnabled — video counterpart of audioApplyBucketEnabled:
+    // validate the config THIS run uses (snapshot overlay when present, else
+    // the global page), so a QFA / scheduled-rule apply isn't blocked with
+    // "Enable at least one Video bucket first" when the buckets live in the
+    // wizard overlay rather than the global Video-tags page.
+    videoApplyBucketEnabled(result) {
+      const ov = this.buildSnapshotOverlay(result).overlayVideoTags;
+      if (ov) return !!((ov.resolution && ov.resolution.enabled) || (ov.codec && ov.codec.enabled) || (ov.hdr && ov.hdr.enabled));
+      return this.anyVideoTagsBucketEnabled();
+    },
     videoTagPrefixInvalid(bucketKey) {
       const p = (this.videoTags[bucketKey] && this.videoTags[bucketKey].prefix) || '';
       return !this.autoTagPrefixRule.test(p);
@@ -478,7 +501,7 @@ function appAudioVideoTags() {
       // instanceIdOverride: same target=both fan-out as runAudioTagsScan.
       const targetInstanceId = instanceIdOverride || this.scanInstanceId;
       if (!targetInstanceId) { this.showToast('Pick an instance first', 'error'); return; }
-      if (!this.anyVideoTagsBucketEnabled()) { this.showToast('Enable at least one Video bucket first', 'error'); return; }
+      if (!this.videoApplyBucketEnabled(this.qfaDetailVideo)) { this.showToast('Enable at least one Video bucket first', 'error'); return; }
       const isFirstPass = !instanceIdOverride;
       if (isFirstPass) {
         this.closeAllResultModals('video');

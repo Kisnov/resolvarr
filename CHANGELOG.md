@@ -2,6 +2,12 @@
 
 > ⚠️ **`:dev` is a moving target.** Between dev builds, some changes are not always backwards-compatible with previous versions — your existing rules get auto-converted on first start, but the shape and the controls in the wizard can change. If you're running `:dev`, plan for the occasional adjustment. The first stable `:latest` will be locked down with normal upgrade discipline.
 
+## v0.6.75-dev — Apply audio/video tags from a rule or Quick fix-all (2026-07-04)
+
+### Fixed
+
+- **Applying the audio or video tags from a scheduled rule or a Quick fix-all run no longer fails with "Enable Audio bucket first" (or the video equivalent) when the bucket is turned on in that rule.** The Apply button was checking the Library scan page's own settings instead of the rule's, so a preview would succeed but Apply would refuse. It now checks the same settings the run used.
+
 ## v0.6.74-dev — qBittorrent-behind-VPN fix + TBA refresh notifications (2026-07-04)
 
 ### Fixed
