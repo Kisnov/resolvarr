@@ -109,6 +109,27 @@ func pathHasTbaToken(relPath string) bool {
 	return reTbaToken.MatchString(baseNameOf(relPath))
 }
 
+// isTbaRefreshCandidate reports whether a Sonarr rename-preview record is a
+// TBA file worth refreshing: its current name carries a "TBA" token AND the
+// rename would actually remove it (the proposed new name is TBA-free). A
+// record whose NEW name still contains "TBA" means Sonarr doesn't know the
+// real episode title yet, so renaming can't clear the placeholder — the file
+// would be re-found and re-reported on every run without anything changing.
+// Skip it until the real title lands, so the scan (and its notification) only
+// ever surfaces files it can actually fix.
+func isTbaRefreshCandidate(rec arr.SonarrRenameRecord, includeSpecials bool) bool {
+	if !includeSpecials && rec.SeasonNumber == 0 {
+		return false
+	}
+	if !pathHasTbaToken(rec.ExistingPath) {
+		return false
+	}
+	if pathHasTbaToken(rec.NewPath) {
+		return false
+	}
+	return true
+}
+
 // baseNameOf returns the last path segment, splitting on both / and \
 // (Sonarr reports relative paths with either separator depending on
 // host OS).
@@ -249,10 +270,7 @@ func (s *Server) runTbaRefreshPreview(
 		}
 		var files []tbaRefreshFile
 		for _, rec := range results[i].records {
-			if !includeSpecials && rec.SeasonNumber == 0 {
-				continue
-			}
-			if !pathHasTbaToken(rec.ExistingPath) {
+			if !isTbaRefreshCandidate(rec, includeSpecials) {
 				continue
 			}
 			files = append(files, tbaRefreshFile{
