@@ -2,6 +2,12 @@
 
 > ⚠️ **`:dev` is a moving target.** Between dev builds, some changes are not always backwards-compatible with previous versions — your existing rules get auto-converted on first start, but the shape and the controls in the wizard can change. If you're running `:dev`, plan for the occasional adjustment. The first stable `:latest` will be locked down with normal upgrade discipline.
 
+## v0.6.76-dev — TBA refresh only targets files it can actually fix (2026-07-05)
+
+### Fixed
+
+- **TBA refresh no longer keeps flagging files that can't be renamed yet.** It used to list any file with "TBA" in the name, including episodes Sonarr still doesn't have the real title for, so the same files came back every run and a scheduled TBA job sent the same notification over and over. It now only targets files where the rename actually removes the "TBA" placeholder (Sonarr knows the real title), so they drop off the list once fixed and the notification fires only when something really changed.
+
 ## v0.6.75-dev — Apply audio/video tags from a rule or Quick fix-all (2026-07-04)
 
 ### Fixed
