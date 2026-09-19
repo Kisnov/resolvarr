@@ -54,6 +54,11 @@ const (
 	// the redundant ones to the target category on EVERY configured
 	// download client — the user's own cleanup on that category does
 	// the rest. Never deletes. Config on WebhookRule.StuckReconcile.
+	//
+	// Scope is always the movie / series the event names, per
+	// Architectural rule 2 in webhook_adapters.go. Sweeping the whole
+	// queue is the Library scan action's job (and a `reconcile`
+	// schedule's) — that is the deliberate batch model.
 	WebhookFnStuckReconcile WebhookFunction = "stuckReconcile" // Both Arrs
 	// WebhookFnPlexLabelSync propagates whitelist tag changes on the
 	// fired item out to Plex. Runs AFTER the Tag* functions on the
@@ -694,15 +699,6 @@ type StuckReconcileRules struct {
 	// import, so sweeping instantly would miss the very item the event
 	// made redundant. 0 = the default (60s); clamped to 600s.
 	DeferSeconds int `json:"deferSeconds,omitempty"`
-
-	// ScopeWholeQueue widens the sweep from "stuck downloads for the
-	// movie / series this event was about" to "every stuck download in
-	// the queue". Off by default: a rule firing on every import should
-	// do the small, obviously-correct thing (clean up the losers of
-	// THIS race) rather than a full queue sweep on every single import.
-	// Turn it on to get the Library scan action's whole-queue behaviour
-	// on every fire.
-	ScopeWholeQueue bool `json:"scopeWholeQueue,omitempty"`
 }
 
 // WebhookRule is one saved webhook workflow — InstanceID + Functions +

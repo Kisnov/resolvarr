@@ -12455,7 +12455,6 @@ function app() {
         stuckReconcile: {
           targets: [{ qbitInstanceId: '', postCategory: '' }],
           deferSeconds: 60,
-          scopeWholeQueue: false,
         },
         // Plex label sync — inline per-rule config. Same field shape
         // as standalone PlexLabelRule's Plex-side bits (instance +

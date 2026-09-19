@@ -116,7 +116,8 @@ func (s *Server) runReconcile(ctx context.Context, cfg core.Config, inst *core.I
 
 	// Per-target caches (a queue can hold many items for the same
 	// series/movie — fetch each target's data + history once).
-	var radarrItems map[int]arr.Item
+	var radarrItems map[int]arr.Item           // bulk library map — un-narrowed runs only
+	radarrOne := map[int]arr.Item{}            // per-id cache — narrowed runs
 	seriesEpFileID := map[int]map[int]int{}    // seriesId -> episodeId -> episodeFileId
 	seriesEpFileScore := map[int]map[int]int{} // seriesId -> episodeFileId -> cfScore
 	seriesHistory := map[int][]arr.HistoryRecord{}
@@ -163,17 +164,42 @@ func (s *Server) runReconcile(ctx context.Context, cfg core.Config, inst *core.I
 		switch appType {
 		case "radarr":
 			row.MovieID = q.MovieID
-			if radarrItems == nil {
-				items, lerr := client.ListItems(ctx, "radarr")
-				if lerr != nil {
-					return nil, newAPIError(502, "arr list movies: "+lerr.Error())
+			// Narrowed runs (the webhook adapter) fetch just the one
+			// movie. Reading the whole library here would break
+			// Architectural rule 2 in webhook_adapters.go — a 24-episode
+			// season pack would turn into 24 full-library reads, the
+			// exact scaling trap that rule exists to prevent.
+			//
+			// Un-narrowed runs (Library scan page, reconcile schedules)
+			// keep the single bulk read: that is the deliberate batch
+			// model, and one list beats N per-movie fetches there.
+			var (
+				it    arr.Item
+				found bool
+			)
+			if req.ReconcileOnlyMovieID > 0 {
+				if cached, hit := radarrOne[q.MovieID]; hit {
+					it, found = cached, true
+				} else if fetched, ferr := client.GetItem(ctx, "radarr", q.MovieID); ferr == nil {
+					radarrOne[q.MovieID] = fetched
+					it, found = fetched, true
 				}
-				radarrItems = make(map[int]arr.Item, len(items))
-				for _, it := range items {
-					radarrItems[it.ID] = it
+				// A movie that vanished between the queue read and now
+				// just loses its label; the row still gets classified.
+			} else {
+				if radarrItems == nil {
+					items, lerr := client.ListItems(ctx, "radarr")
+					if lerr != nil {
+						return nil, newAPIError(502, "arr list movies: "+lerr.Error())
+					}
+					radarrItems = make(map[int]arr.Item, len(items))
+					for _, x := range items {
+						radarrItems[x.ID] = x
+					}
 				}
+				it, found = radarrItems[q.MovieID]
 			}
-			if it, ok := radarrItems[q.MovieID]; ok {
+			if found {
 				row.TargetLabel = it.Title
 				if it.MovieFile != nil {
 					row.HasFile = true

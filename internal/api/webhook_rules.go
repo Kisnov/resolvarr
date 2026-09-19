@@ -60,6 +60,11 @@ const (
 	// maxStuckReconcileDeferSeconds mirrors the category-fix clamp —
 	// 10 minutes is already generous for "let the Arr settle first".
 	maxStuckReconcileDeferSeconds = 600
+	// minStuckReconcileDeferSeconds matches the wizard's number input.
+	// Anything shorter runs before Sonarr/Radarr has settled the losing
+	// queue rows into importPending / importBlocked, which is the whole
+	// reason the delay exists. 0 still means "use the default".
+	minStuckReconcileDeferSeconds = 5
 )
 
 // webhookRuleRequest is the POST/PUT body. Mirrors core.WebhookRule with
@@ -281,6 +286,9 @@ func (req *webhookRuleRequest) validate(cfg core.Config) *apiError {
 		}
 		if req.StuckReconcile.DeferSeconds < 0 {
 			return newAPIError(400, "stuckReconcile.deferSeconds cannot be negative")
+		}
+		if req.StuckReconcile.DeferSeconds > 0 && req.StuckReconcile.DeferSeconds < minStuckReconcileDeferSeconds {
+			return newAPIError(400, fmt.Sprintf("stuckReconcile.deferSeconds must be 0 (default) or at least %d", minStuckReconcileDeferSeconds))
 		}
 		if req.StuckReconcile.DeferSeconds > maxStuckReconcileDeferSeconds {
 			return newAPIError(400, fmt.Sprintf("stuckReconcile.deferSeconds cannot exceed %d", maxStuckReconcileDeferSeconds))

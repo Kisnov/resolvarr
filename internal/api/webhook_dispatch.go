@@ -337,12 +337,16 @@ func (s *Server) executeWebhookRule(
 		// queue state once the Arr has finished processing the import
 		// this event announced, so an inline sweep would find nothing.
 		if fn == core.WebhookFnStuckReconcile {
-			s.scheduleDeferredStuckReconcile(rule, inst, env, body)
-			secs := int(stuckReconcileDeferDelay(rule) / time.Second)
+			queued := s.scheduleDeferredStuckReconcile(rule, inst, env, body)
+			summary := "already scheduled for this item by an earlier event in the same batch — one sweep covers them all"
+			if queued {
+				secs := int(stuckReconcileDeferDelay(rule) / time.Second)
+				summary = fmt.Sprintf("scheduled, sweeps this item's stuck downloads in the background ~%ds after import so it does not delay Sonarr/Radarr", secs)
+			}
 			results = append(results, functionResult{
 				Function: core.WebhookFnStuckReconcile,
 				OK:       true,
-				Summary:  fmt.Sprintf("scheduled, sweeps the queue in the background ~%ds after import so it does not delay Sonarr/Radarr", secs),
+				Summary:  summary,
 			})
 			continue
 		}
