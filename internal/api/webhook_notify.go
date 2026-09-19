@@ -253,8 +253,7 @@ type QbitCategoryFixDetail struct {
 // the individual moves, so the embed can say what actually happened
 // rather than just "ran".
 type StuckReconcileDetail struct {
-	// Scope is the movie / series title the sweep was narrowed to, or
-	// "whole queue" when the rule opted out of narrowing.
+	// Scope is the movie / series title the sweep was narrowed to.
 	Scope string
 	// Stuck / Moved / NeedsAttention / Failed mirror the reconcile
 	// bucket totals.

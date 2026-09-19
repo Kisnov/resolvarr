@@ -14,10 +14,18 @@ package api
 // The Download event IS the winning import, so firing the sweep right
 // after it is the narrowest possible moment to catch the loser.
 //
-// Scope: by default the sweep is narrowed to the movie / series the
-// event was about (the losers of THIS race). ScopeWholeQueue widens it
-// to the Library scan action's full-queue behaviour when the user wants
-// every fire to be a general cleanup pass.
+// Scope: always the movie / series the event names — the losers of
+// THIS race. Architectural rule 2 (webhook_adapters.go) forbids an
+// adapter fanning out past the item its event identifies, and a
+// whole-queue sweep on every import is exactly the scaling trap that
+// rule calls out. Sweeping the entire queue stays the Library scan
+// action's job, or a `reconcile` schedule's.
+//
+// Coalescing: a 24-episode season pack emits 24 Download events, each
+// naming the same series. Scheduling 24 identical sweeps would re-read
+// the queue, history and manual-import evaluation 24 times for one
+// answer, so a sweep already pending for the same (rule, item) is not
+// scheduled again.
 //
 // Fan-out: the rule carries a LIST of (qBit instance, target category)
 // targets, so one import event reconciles every download client the Arr
@@ -68,6 +76,72 @@ func stuckReconcileDeferDelay(rule *core.WebhookRule) time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
+// stuckReconcileScope resolves which movie / series an import event is
+// about. Returns ok=false when the payload carries no usable item, which
+// is a clean skip rather than a failure (a manual import with no movie
+// block, say).
+//
+// Shared by the scheduler (to build the coalescing key) and the
+// dispatcher (to narrow the sweep) so the two can never disagree about
+// what "this item" means.
+func stuckReconcileScope(appType string, body []byte) (movieID, seriesID int, label string, ok bool) {
+	var payload downloadEventPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return 0, 0, "", false
+	}
+	switch appType {
+	case "radarr":
+		if payload.Movie == nil || payload.Movie.ID <= 0 {
+			return 0, 0, "", false
+		}
+		label = strings.TrimSpace(payload.Movie.Title)
+		if label == "" {
+			label = "this movie"
+		}
+		return payload.Movie.ID, 0, label, true
+	case "sonarr":
+		if payload.Series == nil || payload.Series.ID <= 0 {
+			return 0, 0, "", false
+		}
+		label = strings.TrimSpace(payload.Series.Title)
+		if label == "" {
+			label = "this series"
+		}
+		return 0, payload.Series.ID, label, true
+	}
+	return 0, 0, "", false
+}
+
+// stuckSweepKey identifies one pending sweep: a rule acting on one item.
+// Two events for the same series under the same rule share a key and
+// therefore share a single sweep.
+func stuckSweepKey(ruleID, appType string, movieID, seriesID int) string {
+	return fmt.Sprintf("%s:%s:%d:%d", ruleID, appType, movieID, seriesID)
+}
+
+// claimStuckSweep reserves the key for a pending sweep. Returns false
+// when one is already pending, meaning the caller should not schedule
+// another. releaseStuckSweep frees it as the sweep begins, so a later
+// import for the same item schedules a fresh one.
+func (s *Server) claimStuckSweep(key string) bool {
+	s.stuckSweepMu.Lock()
+	defer s.stuckSweepMu.Unlock()
+	if s.stuckSweepPending == nil {
+		s.stuckSweepPending = map[string]bool{}
+	}
+	if s.stuckSweepPending[key] {
+		return false
+	}
+	s.stuckSweepPending[key] = true
+	return true
+}
+
+func (s *Server) releaseStuckSweep(key string) {
+	s.stuckSweepMu.Lock()
+	defer s.stuckSweepMu.Unlock()
+	delete(s.stuckSweepPending, key)
+}
+
 // scheduleDeferredStuckReconcile runs the stuck-downloads sweep in the
 // background `delay` after the import event instead of inline in the
 // Connect dispatch, and records its own single-function history entry +
@@ -81,9 +155,24 @@ func stuckReconcileDeferDelay(rule *core.WebhookRule) time.Duration {
 //
 // Mirrors scheduleDeferredCategoryFix exactly; if you change the
 // snapshot / panic-guard / history-append shape in one, change both.
-func (s *Server) scheduleDeferredStuckReconcile(rule *core.WebhookRule, inst *core.Instance, env *connectEventEnvelope, body []byte) {
+// Returns false when an identical sweep is already pending, so the
+// dispatcher can say so in the History row instead of implying a second
+// one was queued.
+func (s *Server) scheduleDeferredStuckReconcile(rule *core.WebhookRule, inst *core.Instance, env *connectEventEnvelope, body []byte) bool {
 	if rule == nil || inst == nil || env == nil {
-		return
+		return false
+	}
+	// Coalesce per (rule, item): one sweep answers for every event in a
+	// season-pack burst, since they all name the same series.
+	movieID, seriesID, _, ok := stuckReconcileScope(rule.AppType, body)
+	if !ok {
+		// No usable item on the payload. Let the dispatcher run and
+		// report the skip with its own wording rather than guessing here.
+		movieID, seriesID = 0, 0
+	}
+	key := stuckSweepKey(rule.ID, rule.AppType, movieID, seriesID)
+	if !s.claimStuckSweep(key) {
+		return false
 	}
 	delay := stuckReconcileDeferDelay(rule)
 	ruleCopy := *rule
@@ -92,15 +181,18 @@ func (s *Server) scheduleDeferredStuckReconcile(rule *core.WebhookRule, inst *co
 	bodyCopy := append([]byte(nil), body...)
 	started := time.Now().UTC()
 	time.AfterFunc(delay, func() {
+		// Freed first: from here on the sweep is running, so a later
+		// import for the same item must be able to queue a fresh one.
+		s.releaseStuckSweep(key)
 		defer func() {
 			if rec := recover(); rec != nil {
 				fmt.Fprintf(os.Stderr, "resolvarr: deferred stuck-downloads sweep panicked for rule %s: %v\n", ruleCopy.ID, rec)
 			}
 		}()
-		// Generous budget: the sweep does one queue read plus per-target
-		// history + manualimport lookups, and then one category change
-		// per redundant download across every configured client.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// The sweep reads the queue once, then per-target history +
+		// manual-import evaluations for the one item it is scoped to,
+		// then one category change per redundant download.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		cfg := s.App.Config.Get()
 		res := s.dispatchStuckReconcile(ctx, &ruleCopy, cfg, &envCopy, bodyCopy)
@@ -108,6 +200,7 @@ func (s *Server) scheduleDeferredStuckReconcile(rule *core.WebhookRule, inst *co
 		s.fireWebhookNotifications(&ruleCopy, &instCopy, &envCopy, bodyCopy, []functionResult{res}, run)
 		s.appendWebhookRuleRunsBatch([]pendingRuleRun{{ruleID: ruleCopy.ID, run: run}})
 	})
+	return true
 }
 
 // dispatchStuckReconcile runs the stuck-downloads sweep for one rule on
@@ -157,35 +250,16 @@ func (s *Server) dispatchStuckReconcile(
 		})
 	}
 
-	// Narrow to the item this event was about unless the rule asked for
-	// a whole-queue sweep. A rule firing on every import should do the
-	// small obviously-correct thing by default.
-	scopeLabel := "whole queue"
-	if !rule.StuckReconcile.ScopeWholeQueue {
-		var payload downloadEventPayload
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return functionResult{Function: fn, OK: false, Summary: "decode payload failed", Err: err}
-		}
-		switch rule.AppType {
-		case "radarr":
-			if payload.Movie == nil || payload.Movie.ID <= 0 {
-				return functionResult{Function: fn, OK: true, Summary: "skipped (no movie on the event to scope the sweep to)"}
-			}
-			req.ReconcileOnlyMovieID = payload.Movie.ID
-			scopeLabel = payload.Movie.Title
-		case "sonarr":
-			if payload.Series == nil || payload.Series.ID <= 0 {
-				return functionResult{Function: fn, OK: true, Summary: "skipped (no series on the event to scope the sweep to)"}
-			}
-			req.ReconcileOnlySeriesID = payload.Series.ID
-			scopeLabel = payload.Series.Title
-		default:
-			return functionResult{Function: fn, OK: false, Summary: "unknown app type " + rule.AppType}
-		}
-		if strings.TrimSpace(scopeLabel) == "" {
-			scopeLabel = "this item"
+	// Always narrowed to the item the event names — Architectural rule 2.
+	movieID, seriesID, scopeLabel, ok := stuckReconcileScope(rule.AppType, body)
+	if !ok {
+		return functionResult{
+			Function: fn, OK: true,
+			Summary: "skipped (no movie/series on the event to scope the sweep to)",
 		}
 	}
+	req.ReconcileOnlyMovieID = movieID
+	req.ReconcileOnlySeriesID = seriesID
 
 	resp, apiErr := s.runReconcile(ctx, cfg, inst, rule.AppType, req)
 	s.auditScan("webhook:"+rule.ID, "reconcile", inst, req, resp, errMsgOf(apiErr))
@@ -264,6 +338,7 @@ func collectStuckReconcileMoves(resp *scanResponse) []StuckReconcileMove {
 
 // stuckReconcileMaxMovesInNotification bounds how many individual moves
 // a notification lists before falling back to the count in the summary.
-// A whole-queue sweep on a backlogged setup can move dozens; an embed
-// listing all of them is unreadable and may blow Discord's field limit.
+// A season pack whose every episode lost its race can move dozens at
+// once; an embed listing all of them is unreadable and may blow
+// Discord's field limit.
 const stuckReconcileMaxMovesInNotification = 10

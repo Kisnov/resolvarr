@@ -195,10 +195,11 @@ The **Recent activity** tab shows the Connect events as they arrive, with what e
 
 1. Add (or edit) a webhook rule on the instance and tick **Clear stuck downloads after import**.
 2. On the **Stuck downloads** step, list every qBittorrent client this Sonarr/Radarr downloads through, and the category redundant downloads should move to on each one. Type it exactly as it appears in qBittorrent -- a category that doesn't exist there is refused when the rule runs. It is saved with the rule, so you only enter it once. The first row starts from the download-client config in Sonarr/Radarr.
-3. Leave the scope on **Just this movie/series** unless you want every import to trigger a full queue sweep.
 4. In Sonarr/Radarr -> Settings -> Connect, make sure **On File Import** and **On File Upgrade** are enabled on the connection.
 
 A download is only moved when the episode or movie already has a file scoring as good or better. Anything else -- nothing imported, or the stuck one is actually the better release -- is left alone for you to look at on the Stuck downloads page. **Nothing is ever deleted;** the only change made is the torrent's category, and your own qBittorrent cleanup rule on that category does the rest.
+
+Each fire checks only the movie or series that was just imported. A whole season arriving at once is collapsed into a single check rather than one per episode. To sweep the entire queue, use **Run reconcile** on the Stuck downloads page, or a `reconcile` schedule.
 
 The sweep runs in the background about a minute after the import (adjustable on the same step). That is deliberate: Connect notifications hold up the import until they get a reply, and Sonarr/Radarr needs a moment to settle the losing download into its stuck state before there is anything to find.
 

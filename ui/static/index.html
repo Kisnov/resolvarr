@@ -10399,23 +10399,11 @@
             </div>
           </template>
 
-          <!-- Scope -->
-          <div class="form-group" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border-subtle)">
-            <label style="font-size:13px;color:var(--text-primary);font-weight:500;display:block;margin-bottom:6px">How much of the queue to check</label>
-            <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;margin-bottom:6px">
-              <input type="radio" name="stuck-scope" :checked="!editingRule.stuckReconcile.scopeWholeQueue" @change="editingRule.stuckReconcile.scopeWholeQueue = false" style="accent-color:var(--accent-blue);margin-top:3px">
-              <span>
-                <strong>Just this <span x-text="ruleEditorInstanceType() === 'sonarr' ? 'series' : 'movie'"></span></strong> &mdash; recommended.
-                <span style="color:var(--text-secondary)">Clears only the losers of the race the import just won. Small, fast, and obviously correct on every fire.</span>
-              </span>
-            </label>
-            <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
-              <input type="radio" name="stuck-scope" :checked="editingRule.stuckReconcile.scopeWholeQueue" @change="editingRule.stuckReconcile.scopeWholeQueue = true" style="accent-color:var(--accent-orange);margin-top:3px">
-              <span>
-                <strong>The whole queue</strong>
-                <span style="color:var(--text-secondary)">&mdash; every import triggers a full sweep, same as pressing Run on the Stuck downloads page. Catches older leftovers too, at the cost of more calls to <span x-text="ruleEditorInstanceType() === 'sonarr' ? 'Sonarr' : 'Radarr'"></span> on every single import.</span>
-              </span>
-            </label>
+          <!-- Scope is fixed, not a choice: an adapter only ever acts on
+               the item its event names. Sweeping the whole queue is the
+               Stuck downloads page's job, or a reconcile schedule's. -->
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:14px;padding-top:12px;border-top:1px solid var(--border-subtle);line-height:1.5;max-width:560px">
+            Each fire checks only the <span x-text="ruleEditorInstanceType() === 'sonarr' ? 'series' : 'movie'"></span> that was just imported &mdash; the losers of the race it won. A whole season arriving at once is collapsed into a single check rather than one per episode. To sweep the entire queue, use <strong>Run reconcile</strong> on the Stuck downloads page.
           </div>
 
           <!-- Background-defer delay -->
